@@ -1,0 +1,155 @@
+# DNS 配置可自行修改
+port: 7890
+allow-lan: true
+mode: rule
+log-level: info
+unified-delay: true
+global-client-fingerprint: chrome
+# DNS模块
+dns:
+    # 用于查询 doh
+    default-nameserver:
+        - system
+        - 119.29.29.29
+        - 223.6.6.6
+    ipv6: true
+    enable: true
+    prefer-h3: true
+    enhanced-mode: fake-ip
+    fake-ip-filter-mode: blacklist
+    fake-ip-filter:
+        - "*.lan"
+        - "*.local"
+        - "*.arpa"
+        - time.*.com
+        - ntp.*.com
+        - time.*.com
+        - +.market.xiaomi.com
+        - localhost.ptlogin2.qq.com
+        - "*.msftncsi.com"
+        - www.msftconnecttest.com
+        - "*.tailscale.com"
+        - "*.tailscale.io"
+        - "*.ts.net"
+    # fallback-filter:
+    #   domain:
+    #     - +.google.com
+    #     - +.facebook.com
+    #     - +.youtube.com
+    #   geoip: true
+    #   geoip-code: CN
+    #   ipcidr:
+    #     - 240.0.0.0/4
+    #     - 0.0.0.0/32
+    fake-ip-range: 198.18.0.1/16
+    # 指定 tailscale 网段指定本地 quad100 解析
+    nameserver-police:
+        # +.tailxxxx.ts.net: 100.100.100.100
+    # 默认dns解析服务, 解析规则匹配 ip 和 国内的域名
+    nameserver:
+        - https://doh.pub/dns-query
+        - https://dns.alidns.com/dns-query
+        # - 8.8.8.8
+    # 代理服务器域名解析
+    proxy-server-nameserver:
+        - https://doh.pub/dns-query
+        - https://dns.alidns.com/dns-query
+
+proxy-providers:
+    my-provider:
+        type: http
+        url: "xxx" # 你的订阅地址
+        interval: 86400
+        path: ./nodes.yaml
+        health-check:
+            enable: true
+            interval: 600
+            url: http://www.gstatic.com/generate_204
+
+# 分流组可自行创建或添加，proxies 参数下的节点名称，按需求自行增减，确保出现的节点名称在代理协议中可查找
+proxy-groups:
+    - name: 自动选择
+      type: url-test
+      url: http://www.gstatic.com/generate_204
+      interval: 300
+      tolerance: 100
+      lazy: true
+      use:
+          - my-provider
+
+    - name: 自动回退
+      type: fallback
+      url: "https://www.gstatic.com/generate_204"
+      interval: 120
+      timeout: 5000
+      lazy: true
+      use:
+          - my-provider
+
+    - name: 手动选择
+      type: select
+      use:
+          - my-provider
+      proxies:
+          - 自动回退
+          - 自动选择
+          - DIRECT
+
+    - name: AIGC
+      type: url-test
+      use:
+          - my-provider
+      filter: "(?i)美|us|united states|新加坡|坡|狮城|SG|singapore|日本|jp|japan"
+      url: http://www.gstatic.com/generate_204
+      interval: 300
+      tolerance: 100
+
+    - name: bilibili
+      type: url-test
+      use:
+          - my-provider
+      filter: "^(?=.*((?i)(🇹🇼|🇭🇰)|台湾|香港|(\b(HK|Hong)\b)|(\b(TW|Tai|Taiwan)\b)))(?!.*((?i)回国|校园|游戏|🎮|(\b(GAME)\b))).*$"
+      url: http://www.gstatic.com/generate_204
+      interval: 300
+      tolerance: 100
+
+# 规则集
+rule-providers:
+    ai_domain:
+        type: http
+        behavior: classical
+        url: https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/category-ai-!cn.yaml
+        path: ./ruleset/ai_domain.yaml
+        interval: 86400
+
+    BiliBili:
+        type: http
+        behavior: classical
+        url: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/BiliBili/BiliBili.yaml
+        path: ./ruleset/BiliBili.yaml
+        interval: 86400
+        
+    GlobalMedia:
+        type: http
+        behavior: classical
+        url: https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/refs/heads/master/rule/Clash/GlobalMedia/GlobalMedia.yaml
+        path: ./ruleset/BiliBili.yaml
+        interval: 86400
+
+# 代理规则可自行添加
+rules:
+    - DOMAIN-KEYWORD,v2ex.com,自动选择
+    - DOMAIN-KEYWORD,google,自动选择
+    - DOMAIN,clash.razord.top,DIRECT
+    - DOMAIN,yacd.metacubex.one,DIRECT
+    - DOMAIN,yacd.haishan.me,DIRECT
+    - DOMAIN,d.metacubex.one,DIRECT
+    - DOMAIN,clash.razord.top,DIRECT
+    - DOMAIN,yacd.haishan.me,DIRECT
+
+    - RULE-SET,ai_domain,AIGC
+    - RULE-SET,BiliBili,bilibili
+    - RULE-SET,GlobalMedia,自动选择
+    - GEOIP,LAN,DIRECT
+    - GEOIP,CN,DIRECT
+    - MATCH,自动选择
